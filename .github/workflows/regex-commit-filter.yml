@@ -107,10 +107,13 @@ jobs:
 
       - name: Setup Android environment
         uses: android-actions/setup-android@v4
-        with:
-          # platforms / build-tools are auto-installed by AGP once licenses are accepted;
-          # the NDK and CMake must be pinned because the CMake files depend on them.
-          packages: "ndk;${{ env.NDK_VERSION }}, cmake;${{ env.CMAKE_VERSION }}"
+
+      # Do not use setup-android's `packages` input: it passes the whole string to
+      # sdkmanager, so a comma-separated list becomes "ndk;28.0.13004108," and fails.
+      # platforms / build-tools are auto-installed by AGP once licenses are accepted.
+      - name: Install Android NDK and CMake
+        run: |
+          sdkmanager --install "ndk;${NDK_VERSION}" "cmake;${CMAKE_VERSION}"
 
       - name: Install system dependencies
         run: |
