@@ -189,7 +189,7 @@ class EditRuleActivity : AppCompatActivity() {
         }
         val edit = TextInputEditText(this).apply {
             setText(value)
-            hint = hint
+            this.hint = hint
             if (mono) typeface = Typeface.MONOSPACE
             if (multiline) {
                 inputType = inputType or InputType.TYPE_TEXT_FLAG_MULTI_LINE
