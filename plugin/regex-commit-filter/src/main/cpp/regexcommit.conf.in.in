@@ -1,0 +1,9 @@
+[Addon]
+Name=Regex Commit Filter
+Comment=Rewrite committed text with user-defined RE2 rules
+Type=@FCITX_ADDON_TYPE@
+Library=libregexcommit
+Category=Module
+Version=@PROJECT_VERSION@
+OnDemand=False
+Configurable=False

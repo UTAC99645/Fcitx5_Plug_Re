@@ -1,0 +1,11 @@
+{
+    "uniqueId": "google/re2j",
+    "artifactVersion": "1.8",
+    "description": "RE2/J is a Java port of the RE2 regular expression engine.",
+    "name": "google/re2j",
+    "website": "https://github.com/google/re2j",
+    "tag": "java",
+    "licenses": [
+        "BSD-3-Clause"
+    ]
+}

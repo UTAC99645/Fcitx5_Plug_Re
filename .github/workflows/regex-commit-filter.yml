@@ -1,0 +1,173 @@
+name: Regex Commit Filter
+
+# Dedicated CI for plugin/regex-commit-filter.
+#   1. host-cpp-tests - build & run the rule engine tests on the host (no Android SDK needed)
+#   2. android-build  - assemble the plugin APK for every supported ABI (debug + release),
+#                       run the Kotlin unit tests and verify the APK really contains the
+#                       addon descriptor and the native addon.
+on:
+  push:
+    branches: [master]
+    paths:
+      - "plugin/regex-commit-filter/**"
+      - "lib/**"
+      - "build-logic/**"
+      - "gradle/**"
+      - "gradle.properties"
+      - "build.gradle.kts"
+      - "settings.gradle.kts"
+      - ".github/workflows/regex-commit-filter.yml"
+  pull_request:
+    paths:
+      - "plugin/regex-commit-filter/**"
+      - "lib/**"
+      - "build-logic/**"
+      - "gradle/**"
+      - "gradle.properties"
+      - "build.gradle.kts"
+      - "settings.gradle.kts"
+      - ".github/workflows/regex-commit-filter.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  PLUGIN_DIR: plugin/regex-commit-filter
+  HOST_BUILD_DIR: /tmp/regexcommit-host-build
+  # keep in sync with build-logic/convention/src/main/kotlin/Versions.kt
+  NDK_VERSION: "28.0.13004108"
+  CMAKE_VERSION: "3.31.6"
+
+jobs:
+  host-cpp-tests:
+    name: Host C++ tests (rule engine)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Fetch source code
+        uses: actions/checkout@v7
+
+      - name: Cache fetched abseil / re2
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.HOST_BUILD_DIR }}/_deps
+          key: ${{ runner.os }}-regexcommit-deps-${{ hashFiles('plugin/regex-commit-filter/src/main/cpp/CMakeLists.txt', 'plugin/regex-commit-filter/src/main/cpp/test/CMakeLists.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-regexcommit-deps-
+
+      - name: Configure
+        run: |
+          cmake -S "$PLUGIN_DIR/src/main/cpp/test" -B "$HOST_BUILD_DIR" \
+                -G Ninja -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build "$HOST_BUILD_DIR" --parallel "$(nproc)"
+
+      - name: Run tests
+        run: "$HOST_BUILD_DIR/rule_engine_tests"
+
+  android-build:
+    name: Build APK (${{ matrix.variant }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - variant: debug
+            task: assembleDebug
+            unit_tests: true
+          - variant: release
+            task: assembleRelease
+            unit_tests: false
+    env:
+      # Optional. When the secrets are absent (e.g. pull requests from forks) Gradle
+      # produces an unsigned release APK instead of failing.
+      SIGN_KEY_BASE64: ${{ secrets.SIGN_KEY_BASE64 }}
+      SIGN_KEY_PWD: ${{ secrets.SIGN_KEY_PWD }}
+      SIGN_KEY_ALIAS: ${{ secrets.SIGN_KEY_ALIAS }}
+    steps:
+      - name: Fetch source code
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Setup Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: "temurin"
+          java-version: "17"
+
+      - name: Setup Android environment
+        uses: android-actions/setup-android@v4
+        with:
+          # platforms / build-tools are auto-installed by AGP once licenses are accepted;
+          # the NDK and CMake must be pinned because the CMake files depend on them.
+          packages: "ndk;${{ env.NDK_VERSION }}, cmake;${{ env.CMAKE_VERSION }}"
+
+      - name: Install system dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y extra-cmake-modules gettext
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Run Kotlin unit tests
+        if: matrix.unit_tests
+        run: ./gradlew :plugin:regex-commit-filter:testDebugUnitTest --stacktrace
+
+      - name: Build ${{ matrix.variant }} APK
+        run: ./gradlew :plugin:regex-commit-filter:${{ matrix.task }} --stacktrace
+
+      # Guard against packaging regressions: the addon descriptor must be merged into
+      # assets/usr and every ABI split must carry the native addon. Without either of
+      # them the main app silently ignores the plugin.
+      - name: Verify APK contents
+        shell: bash
+        run: |
+          set -euo pipefail
+          apk_dir="$PLUGIN_DIR/build/outputs/apk/${{ matrix.variant }}"
+          shopt -s nullglob
+          apks=("$apk_dir"/*.apk)
+          if [ ${#apks[@]} -eq 0 ]; then
+            echo "::error::no APK produced in $apk_dir"
+            exit 1
+          fi
+          for apk in "${apks[@]}"; do
+            echo "checking $(basename "$apk")"
+            # capture the listing once: `unzip -l | grep -q` may SIGPIPE unzip,
+            # which `pipefail` would turn into a false failure.
+            listing=$(unzip -l "$apk")
+            expect() {
+              if ! grep -Fq "$1" <<< "$listing"; then
+                echo "::error::$2 is missing in $apk"
+                exit 1
+              fi
+            }
+            expect "assets/usr/share/fcitx5/addon/regexcommit.conf" "the addon descriptor"
+            expect "assets/descriptor.json" "descriptor.json"
+            expect "libregexcommit.so" "the native addon"
+          done
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v7
+        with:
+          name: regex-commit-filter-${{ matrix.variant }}
+          path: ${{ env.PLUGIN_DIR }}/build/outputs/apk/${{ matrix.variant }}/*.apk
+          if-no-files-found: error
+
+      - name: Upload build and test reports
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: regex-commit-filter-${{ matrix.variant }}-reports
+          path: |
+            ${{ env.PLUGIN_DIR }}/build/reports/
+          if-no-files-found: ignore

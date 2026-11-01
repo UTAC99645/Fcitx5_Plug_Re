@@ -1,0 +1,11 @@
+{
+    "uniqueId": "google/re2",
+    "artifactVersion": "2024-07-02",
+    "description": "RE2 is a regular expression engine with linear-time matching.",
+    "name": "google/re2",
+    "website": "https://github.com/google/re2",
+    "tag": "native",
+    "licenses": [
+        "BSD-3-Clause"
+    ]
+}

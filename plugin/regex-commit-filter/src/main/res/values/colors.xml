@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="rcf_primary">#3E6B8A</color>
+    <color name="rcf_primary_dark">#2C4E66</color>
+    <color name="rcf_secondary">#6B8A3E</color>
+    <color name="rcf_error">#B3261E</color>
+    <color name="rcf_mono_bg">#11000000</color>
+</resources>

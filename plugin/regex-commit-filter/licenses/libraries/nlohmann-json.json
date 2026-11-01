@@ -1,0 +1,11 @@
+{
+    "uniqueId": "nlohmann/json",
+    "artifactVersion": "3.11.3",
+    "description": "JSON for Modern C++ (single-header).",
+    "name": "nlohmann/json",
+    "website": "https://github.com/nlohmann/json",
+    "tag": "native",
+    "licenses": [
+        "MIT"
+    ]
+}

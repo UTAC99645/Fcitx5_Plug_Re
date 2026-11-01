@@ -9,6 +9,7 @@ test = "1.7.0"
 splitties = "3.0.0"
 aboutlibraries = "14.2.1"
 arrow = "2.2.3"
+re2j = "1.8"
 
 [libraries]
 android-gradlePlugin = { group = "com.android.tools.build", name = "gradle", version.ref = "androidGradlePlugin" }
@@ -57,6 +58,7 @@ splitties-views-recyclerview = { module = "com.louiscad.splitties:splitties-view
 aboutlibraries-core = { module = "com.mikepenz:aboutlibraries-core", version.ref = "aboutlibraries" }
 aboutlibraries-plugin = { module = "com.mikepenz.aboutlibraries.plugin:aboutlibraries-plugin", version.ref = "aboutlibraries" }
 junit = { module = "junit:junit", version = "4.13.2" }
+re2j = { module = "com.google.re2j:re2j", version.ref = "re2j" }
 androidx-test-runner = { module = "androidx.test:runner", version.ref = "test" }
 androidx-test-rules = { module = "androidx.test:rules", version.ref = "test" }
 androidx-lifecycle-testing = { module = "androidx.lifecycle:lifecycle-runtime-testing", version.ref = "lifecycle" }
