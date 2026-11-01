@@ -104,6 +104,10 @@ jobs:
       SIGN_KEY_BASE64: ${{ secrets.SIGN_KEY_BASE64 }}
       SIGN_KEY_PWD: ${{ secrets.SIGN_KEY_PWD }}
       SIGN_KEY_ALIAS: ${{ secrets.SIGN_KEY_ALIAS }}
+      # Tag builds use the tag as the version name so the APK filenames stay clean
+      # (e.g. ...-v0.1.0-arm64-v8a-release.apk instead of ...-v0.1.0-0-gabc1234-...).
+      # An empty value makes Gradle fall back to `git describe --tags --long --always`.
+      BUILD_VERSION_NAME: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || '' }}
     steps:
       - name: Fetch source code
         uses: actions/checkout@v7
@@ -198,6 +202,13 @@ jobs:
     permissions:
       contents: write
     steps:
+      # gh needs a git repository to resolve the target commit and to generate
+      # release notes from the tag history.
+      - name: Fetch source code
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
       - name: Download release APKs
         uses: actions/download-artifact@v5
         with:
