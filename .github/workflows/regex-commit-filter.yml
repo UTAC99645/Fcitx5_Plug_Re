@@ -7,7 +7,8 @@ name: Regex Commit Filter
 #                       addon descriptor and the native addon.
 on:
   push:
-    branches: [master]
+    # upstream uses `master`, forks usually keep `main`
+    branches: [master, main]
     paths:
       - "plugin/regex-commit-filter/**"
       - "lib/**"
