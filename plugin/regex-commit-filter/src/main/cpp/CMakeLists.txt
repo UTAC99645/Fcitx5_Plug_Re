@@ -48,6 +48,11 @@ add_fcitx5_addon(regexcommit
         rule_engine.cpp
         rulesocket.cpp)
 
+# fcitx5's public headers require C++20 (std::span, std::ranges,
+# std::string_view::starts_with), see fcitx5/cmake/Fcitx5CompilerSettings.cmake.
+# The project-wide default stays 17 for re2/abseil; only this target is raised.
+set_target_properties(regexcommit PROPERTIES CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON)
+
 target_include_directories(regexcommit PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/third_party")
 target_link_libraries(regexcommit Fcitx5::Core re2)
 
