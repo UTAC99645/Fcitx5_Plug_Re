@@ -5,10 +5,17 @@ name: Regex Commit Filter
 #   2. android-build  - assemble the plugin APK for every supported ABI (debug + release),
 #                       run the Kotlin unit tests and verify the APK really contains the
 #                       addon descriptor and the native addon.
+#   3. release        - publish the signed release APKs as a GitHub Release. Triggered by
+#                       a `v*` tag push, or manually via "Run workflow" with a tag name.
+#
+# Signing needs three repository secrets (see plugin/regex-commit-filter/README.md):
+#   SIGN_KEY_BASE64, SIGN_KEY_PWD, SIGN_KEY_ALIAS
 on:
   push:
     # upstream uses `master`, forks usually keep `main`
     branches: [master, main]
+    # tag pushes skip the `paths` filter and always build + publish a release
+    tags: ["v*"]
     paths:
       - "plugin/regex-commit-filter/**"
       - "lib/**"
@@ -29,6 +36,11 @@ on:
       - "settings.gradle.kts"
       - ".github/workflows/regex-commit-filter.yml"
   workflow_dispatch:
+    inputs:
+      publish_tag:
+        description: "Publish a GitHub Release with this tag (leave empty to build only)"
+        required: false
+        default: ""
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -175,3 +187,58 @@ jobs:
           path: |
             ${{ env.PLUGIN_DIR }}/build/reports/
           if-no-files-found: ignore
+
+  release:
+    name: Publish GitHub Release
+    needs: [android-build]
+    # a `v*` tag push, or a manual run with a tag name filled in
+    if: github.ref_type == 'tag' || (github.event_name == 'workflow_dispatch' && inputs.publish_tag != '')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - name: Download release APKs
+        uses: actions/download-artifact@v5
+        with:
+          name: regex-commit-filter-release
+          path: dist
+
+      # Never publish an unsigned APK: it cannot be installed over an older build
+      # of the same plugin, and it silently fails the plugin signature check.
+      - name: Make sure every APK is signed
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          apks=(dist/*.apk)
+          if [ ${#apks[@]} -eq 0 ]; then
+            echo "::error::no release APK was produced"
+            exit 1
+          fi
+          for apk in "${apks[@]}"; do
+            listing=$(unzip -l "$apk")
+            if ! grep -Eq 'META-INF/[A-Za-z0-9_-]+(\.RSA|\.DSA|\.EC)' <<< "$listing"; then
+              echo "::error::$(basename "$apk") is not signed, refusing to publish"
+              exit 1
+            fi
+            echo "signed: $(basename "$apk")"
+          done
+
+      - name: Create or update the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_type == 'tag' && github.ref_name || inputs.publish_tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            gh release upload "$TAG" dist/*.apk --clobber
+          elif [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            # the tag already exists, let gh infer the target commit
+            gh release create "$TAG" dist/*.apk --title "$TAG" --generate-notes
+          else
+            # manual run: create the tag at the commit that was just built
+            gh release create "$TAG" dist/*.apk \
+              --target "$GITHUB_SHA" --title "$TAG" --generate-notes
+          fi

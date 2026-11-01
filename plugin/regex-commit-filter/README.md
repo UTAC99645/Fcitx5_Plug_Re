@@ -170,6 +170,47 @@ adb install-multiple -r plugin/regex-commit-filter/build/outputs/apk/debug/*.apk
 > `org.fcitx.fcitx5.android.debug`（套接字名随之变化）。**debug 插件请搭配 debug 版主程序**，
 > release 插件搭配 release 版主程序，否则同步会找不到 addon。
 
+### 签名与自动发版
+
+release 的签名完全复用仓库 `build-logic` 里的既有机制（
+`build-logic/convention/src/main/kotlin/ProjectExtensions.kt` 中的 `signingConfigs.fromProjectEnv`），
+本插件模块不需要额外配置 `signingConfigs`。只要给构建环境提供下面三个变量（CI 里读同名 secrets），
+release APK 就会自动签名；缺失时自动回退为未签名产物，不会让构建失败。
+
+| 变量 / Secret | 含义 |
+| --- | --- |
+| `SIGN_KEY_BASE64` | keystore 的 Base64（**不带换行**） |
+| `SIGN_KEY_PWD` | keystore 密码，同时也是 key 密码 |
+| `SIGN_KEY_ALIAS` | key 别名 |
+
+本地签名构建：
+
+```bash
+export SIGN_KEY_FILE=/path/to/regex-commit-release.jks   # 或改用 SIGN_KEY_BASE64
+export SIGN_KEY_PWD='<密码>'
+export SIGN_KEY_ALIAS=regexcommit
+./gradlew :plugin:regex-commit-filter:assembleRelease
+```
+
+CI 配置 secrets（用有 admin 权限的 token，或直接在 GitHub 网页 Settings → Secrets → Actions 里添加）：
+
+```bash
+base64 -w 0 regex-commit-release.jks | gh secret set SIGN_KEY_BASE64 -R <owner>/<repo>
+gh secret set SIGN_KEY_PWD   -R <owner>/<repo> --body '<密码>'
+gh secret set SIGN_KEY_ALIAS -R <owner>/<repo> --body 'regexcommit'
+```
+
+自动发版（`.github/workflows/regex-commit-filter.yml` 的 `release` 作业）：
+
+- 推送 `v*` 形式的 tag（例如 `git tag v0.1.0 && git push origin v0.1.0`）→ 构建完成后自动创建 GitHub Release，
+  上传 release 变体的各 ABI APK，并附带自动生成的 release notes。
+- 或在 Actions 页面手动 **Run workflow**，在 `publish_tag` 里填 `v0.1.0` → 以当前提交为 target 创建该 tag 与 Release。
+- 同名 Release 已存在时改为 `gh release upload --clobber` 覆盖附件。
+- 发布前会校验 APK 内确有 `META-INF/*.RSA|*.DSA|*.EC` 签名块，**未签名则拒绝发布**。
+
+> tag 触发的推送会跳过 `paths` 过滤，因此打 tag 一定会重新构建；PR 与普通分支推送仍只在本插件相关路径变更时触发。
+> 请妥善备份 keystore：Android 不允许用不同签名的 APK 覆盖安装，换钥匙会导致用户必须先卸载旧插件。
+
 ## 七、手动验收
 
 前提：已完成上面两步，并且在系统设置里启用了小企鹅输入法。
